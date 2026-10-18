@@ -40,11 +40,11 @@
 
 Translation Agency for Claude Code does the job you pay XTRF for, as a Postgres database and a set of agent commands. There is no web front end. You open the folder in [Claude Code](https://claude.com/claude-code) (or Codex, OpenCode, Cursor: see `AGENTS.md`) and ask for what you want in plain language. It runs the right query, and it can answer questions the XTRF dashboard cannot.
 
-<!-- TODO(author): the annual bill. One sentence: what a 10 to 50 person business typically pays XTRF per year, all in, with a source. -->
+XTM, which now owns XTRF, publishes no price for it: "Pricing tailored to your project, vendor and financial management requirements" ([xtm.ai/pricing](https://xtm.ai/pricing), checked October 2026). Whatever your quote says, it is a rent on your own clients, linguists and projects, every year.
 
 Want the same thing with a web front end, or built on a different stack? That is a customisation, and it is exactly what Enterprise DNA does: [book a call](https://enterprisedna.co/omni/book/?utm_source=github&utm_medium=readme&utm_campaign=xtrf).
 
-<!-- TODO(author): two or three sentences on what this specific product covers and who it is for. -->
+This one is for translation and interpreting agencies of five to fifty people: the clients and their rates, the linguist panel with each person's language directions, NAATI credentials, competence record and confidentiality agreement, quotes, projects split into a translation job and a revision job, interpreting bookings, timesheets, late cancellations, client invoices and linguist pay runs. Underneath it is the number the dashboard never leads with: what each client, language and service leaves after paying the linguists. The rules are built in as gates with their sources cited: nobody revises their own translation (ISO 17100), a certified translation goes only to a NAATI Certified Translator in that direction, a court booking gets a Certified Interpreter or above, and nobody works without a confidentiality agreement on file. Accounting stays where it is; one export hands it the invoices.
 
 ## Why no front end
 
@@ -63,7 +63,7 @@ npm install
 npm run demo
 ```
 
-Then open the folder in Claude Code and type a slash command. <!-- TODO(author): name the first command to try. -->
+Then open the folder in Claude Code and type `/attention`. The demo agency has a Somali maternity booking tomorrow with nobody on it, a Vietnamese court booking given to a provisional interpreter, police certificates for a visa given to a translator whose NAATI certification lapsed ten days ago, a Japanese price list two days late, a Korean contract translated with nobody revising it, a phone job finished with no timesheet, a Spanish translator working with no confidentiality agreement, a quote nobody chased, and a wine exporter's rate that leaves 20% after paying the translator and reviser. The answer shows you exactly how this system thinks.
 
 ### Use it with your own Postgres or Supabase
 
@@ -71,15 +71,68 @@ Copy `.env.example` to `.env`, set `DATABASE_URL`, then `npm run migrate`. Same 
 
 ## The commands
 
-<!-- TODO(author): a table of the slash commands in .claude/commands and what each one does. -->
-
 | Command | What it does |
 |---|---|
-| `/...` | ... |
+| `/attention` | Everything that wants a decision, worst first. An uncovered booking or an uncertified certified translation outranks everything |
+| `/today` | The day's bookings and who is on each, jobs due, projects due back |
+| `/quote` `/quotes` | Price a translation from the client's rate, draft the email, chase what is out |
+| `/project` | Open a project (translation plus revision), or show one project's card |
+| `/find` | Who can take this: by direction and NAATI certification, or by language, setting and time |
+| `/assign` `/done` `/deliver` | Give out jobs, finish them, deliver, with the revision and certification gates |
+| `/book` `/interpreter` `/timesheet` | Interpreting: book, put a credentialed interpreter on, record the minutes |
+| `/bookings` `/cancel` | What is ahead; cancel with the reason, late ones charged at the minimum |
+| `/panel` `/credentials` | The linguists, their directions, NAATI credentials, competence and agreements; renewals due |
+| `/client` | A client's whole card |
+| `/margins` | What each client, language and service leaves after paying the linguists |
+| `/bill` `/invoices` `/hold` | Draft invoices from finished work, what is owed, credit holds |
+| `/pay-run` | Pay the linguists for finished work, with remittance advice |
+| `/compliance` | The rule book run against the records, sources cited |
+| `/weekly-review` | The Monday review written from eight commands |
+| `/log` `/draft` | Notes on the record; quotes, confirmations, job offers, reminders to `drafts/`, never sent |
+| `/import` `/export` | Bring the business across from XTRF, test run first; everything out as CSV |
+| `/customise` | Change a field, a rate, a rule, in plain language |
+| `/new-view` | A new read-only dashboard page, described in plain language |
 
-## Instead of xtrf
+`npm run view` renders three branded dashboards (the week, money, the panel). `npm run docs` renders the paperwork: quotes, the certification statement for each certified translation with the translator's NAATI number, tax invoices, and remittance advice for each linguist pay run.
 
-<!-- TODO(author): how to bring data across from XTRF; link docs/replace-xtrf.md -->
+## Instead of XTRF
+
+Export the Clients, Vendors and Projects views from XTRF as CSV (every XTRF view has an Export button), then:
+
+```bash
+node scripts/agency.mjs import xtrf --clients=clients.csv --vendors=vendors.csv --projects=projects.csv --dry-run
+node scripts/agency.mjs import xtrf --clients=clients.csv --vendors=vendors.csv --projects=projects.csv
+```
+
+The importer matches common column-name variants, reads each vendor's language combinations as the directions they work in, splits a project with several target languages into one per language, runs as one transaction, is idempotent (re-running updates instead of duplicating), and names every row it skips. NAATI credentials, competence and confidentiality agreements are entered from the source records, on purpose: every gate rests on them. [docs/replace-xtrf.md](docs/replace-xtrf.md) covers exactly what carries over and what starts fresh.
+
+### Ten questions your agency dashboard cannot answer
+
+Each is one plain-language ask away in Claude Code, because the record is a database you own:
+
+1. Which interpreting bookings in the next 48 hours have nobody on them?
+2. Which court and legal bookings have an interpreter below Certified Interpreter?
+3. Which certified translations sit with a translator whose NAATI certification will have lapsed by the due date?
+4. Which translations are finished and waiting with nobody revising them?
+5. Which NAATI credentials run out in the next 90 days, and whose work is booked on them?
+6. What does each client leave after paying the linguists, and which client rate is under our target?
+7. Which language pairs have only one linguist, so a revision has nobody to do it?
+8. Who on the panel can take Persian certified work today?
+9. Which finished projects, sessions and late cancellations have not been invoiced?
+10. What do we owe each linguist, and for which jobs?
+
+## Your first hour: ten things to ask for
+
+1. "Walk me through everything on the attention list and what clears each one."
+2. "Who can cover the Somali booking at Eastern Health tomorrow at 2?"
+3. "Reza has renewed: NAATI CT Persian into English, CPN5R6S7T, to October 2029."
+4. "Quote Kestrel Migration for three Chinese certificates, certified, for a partner visa."
+5. "Book a Vietnamese interpreter for Collins Street Legal, County Court, Thursday 10am, three hours."
+6. "Hana finished the Korean contract. Who can revise it?"
+7. "What did Fernhill Wines leave us after paying the translators this quarter?"
+8. "Draft the invoices for everything finished up to Friday."
+9. "Raise Fernhill's rate to 26 cents a word from next month." (a one-line `/customise`)
+10. "Add a page that shows each interpreter's sessions and hours by week."
 
 ## Architecture
 

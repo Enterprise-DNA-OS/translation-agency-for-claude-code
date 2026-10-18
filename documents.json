@@ -1,11 +1,47 @@
 [
   {
-    "name": "example",
-    "title": "TODO(author): the first document this industry must produce",
-    "for_each": "select gen_random_uuid() as id, 'Example' as name",
+    "name": "quote",
+    "title": "Quote",
+    "for_each": "select q.id, q.ref || ' ' || c.name as name from quotes q join clients c on c.id = q.client_id where q.status in ('draft', 'sent') order by q.ref",
     "file": "name",
     "sections": [
-      { "title": "Details", "sql": "select 'replace me' as item, $1::text as record_id" }
+      { "title": "Quote", "sql": "select q.ref as quote, (select value from settings where key = 'business_name') as from_business, c.name as for_client, coalesce(c.contact_name, '') as attention, coalesce(q.valid_until::text, 'on sending, ' || setting_num('quote_valid_days', 30) || ' days') as valid_until from quotes q join clients c on c.id = q.client_id where q.id = $1" },
+      { "title": "The work", "sql": "select q.title, s.name as from_language, t.name as into_language, case when q.certified then q.pages || ' page(s), certified by a NAATI Certified Translator' else q.words || ' words' end as scope, 'Translated, then revised by a second qualified linguist' as process, q.due_days || ' days from go-ahead' as ready from quotes q join languages s on s.code = q.source_lang join languages t on t.code = q.target_lang where q.id = $1" },
+      { "title": "Price", "sql": "select to_char(amount_cents / 100.0, 'FM$999,990.00') as ex_gst, to_char(amount_cents * setting_num('gst_pct', 10) / 10000.0, 'FM$999,990.00') as gst, to_char(amount_cents * (1 + setting_num('gst_pct', 10) / 100) / 100.0, 'FM$999,990.00') as total_incl_gst from quotes where id = $1" }
+    ]
+  },
+  {
+    "name": "certification",
+    "title": "Certification of translation",
+    "for_each": "select p.id, p.ref || ' ' || p.title as name from projects p where p.certified and p.status = 'delivered' order by p.ref",
+    "file": "name",
+    "sections": [
+      { "title": "Document", "sql": "select p.ref as our_reference, p.title as documents, s.name as from_language, t.name as into_language, p.pages, coalesce(p.purpose, '') as purpose, p.delivered_on as date from projects p join languages s on s.code = p.source_lang join languages t on t.code = p.target_lang where p.id = $1" },
+      { "title": "Translator", "sql": "select l.name as translator, 'NAATI Certified Translator, ' || c.source_lang || ' into ' || c.target_lang as credential, c.number as naati_number, c.expires_on as credential_valid_to from jobs j join projects p on p.id = j.project_id join linguists l on l.id = j.linguist_id left join credentials c on c.linguist_id = l.id and c.type = 'CT' and c.source_lang = p.source_lang and c.target_lang = p.target_lang and c.expires_on >= p.delivered_on where j.project_id = $1 and j.step = 'translation' and j.status = 'done'" },
+      { "title": "Statement", "sql": "select 'I certify that the attached is a true and accurate translation of the original document(s) provided to me, from ' || s.name || ' into ' || t.name || ', to the best of my knowledge and ability. It was revised by a second linguist before issue.' as statement, 'Signature and NAATI stamp: ______________________' as signed from projects p join languages s on s.code = p.source_lang join languages t on t.code = p.target_lang where p.id = $1" }
+    ]
+  },
+  {
+    "name": "invoice",
+    "title": "Tax invoice",
+    "for_each": "select i.id, i.ref || ' ' || c.name as name from invoices i join clients c on c.id = i.client_id where i.status in ('draft', 'issued') order by i.ref",
+    "file": "name",
+    "sections": [
+      { "title": "Invoice", "sql": "select i.ref as invoice, case when i.status = 'draft' then 'DRAFT, not issued' else i.status end as status, coalesce(i.issued_on::text, '') as issued, coalesce(i.due_on::text, '') as due, (select value from settings where key = 'business_name') as from_business from invoices i where i.id = $1" },
+      { "title": "Bill to", "sql": "select c.name, coalesce(c.abn, '') as abn, coalesce(c.contact_name, '') as attention, coalesce(c.email, '') as email from invoices i join clients c on c.id = i.client_id where i.id = $1" },
+      { "title": "Work", "sql": "select description, to_char(amount_cents / 100.0, 'FM$999,990.00') as amount_ex_gst from invoice_lines where invoice_id = $1 order by description" },
+      { "title": "Total", "sql": "select to_char(sum(amount_cents) / 100.0, 'FM$999,990.00') as ex_gst, to_char(sum(amount_cents) * setting_num('gst_pct', 10) / 10000.0, 'FM$999,990.00') as gst, to_char(sum(amount_cents) * (1 + setting_num('gst_pct', 10) / 100) / 100.0, 'FM$999,990.00') as total_incl_gst from invoice_lines where invoice_id = $1" }
+    ]
+  },
+  {
+    "name": "remittance",
+    "title": "Remittance advice",
+    "for_each": "select r.id, r.ref || ' ' || l.name as name from pay_runs r join linguists l on l.id = r.linguist_id where r.status in ('draft', 'approved') order by r.ref",
+    "file": "name",
+    "sections": [
+      { "title": "Pay run", "sql": "select r.ref as pay_run, l.name as linguist, coalesce(l.abn, '') as abn, case when l.gst_registered then 'yes' else 'no' end as gst_registered, r.period_to as work_to, r.status from pay_runs r join linguists l on l.id = r.linguist_id where r.id = $1" },
+      { "title": "Work", "sql": "select description, to_char(amount_cents / 100.0, 'FM$999,990.00') as amount from pay_lines where pay_run_id = $1 order by description" },
+      { "title": "Total", "sql": "select to_char(sum(amount_cents) / 100.0, 'FM$999,990.00') as amount, 'Rates are ex GST. A GST-registered linguist sends their own tax invoice unless a recipient-created tax invoice agreement is in place.' as note from pay_lines where pay_run_id = $1" }
     ]
   }
 ]

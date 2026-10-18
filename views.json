@@ -2,12 +2,73 @@
   {
     "name": "week",
     "title": "This week",
-    "subtitle": "Translation Agency for Claude Code: what needs attention, rendered by npm run view",
+    "subtitle": "Translation Agency for Claude Code: what needs a decision, the bookings and the deadlines, rendered by npm run view",
     "sections": [
       {
-        "title": "Needs attention",
-        "note": "TODO(author): point this at the industry's attention view (overdue, stuck, quiet).",
-        "sql": "select 'replace me' as item, 'TODO(author)' as why"
+        "title": "Needs a decision",
+        "note": "Worst first. An uncovered booking, an interpreter without the credential, or a certified translation without a certified translator outranks everything.",
+        "sql": "select rank, reason, label, who, detail from v_attention order by rank, days desc nulls last, label limit 25"
+      },
+      {
+        "title": "Interpreting, the next seven days",
+        "sql": "select ref as booking, to_char(starts_at, 'Dy DD Mon HH24:MI') as starts, language, mode, setting, client, coalesce(interpreter, 'NOBODY') as interpreter from v_bookings where status in ('open', 'assigned') and on_date between current_date and current_date + 7 order by starts_at"
+      },
+      {
+        "title": "Translations due, the next seven days",
+        "note": "Revised means a second linguist has finished checking every translation in it.",
+        "sql": "select ref as project, to_char(due_on, 'Dy DD Mon') as due, client, title, source_lang || ' > ' || target_lang as pair, case when certified then 'yes' else '' end as certified, coalesce(translator, 'nobody') as translator, coalesce(reviser, 'nobody') as reviser, case when revision_ok then 'yes' else 'not yet' end as revised from v_projects where status = 'open' and due_on <= current_date + 7 order by due_on"
+      },
+      {
+        "title": "NAATI credentials to renew",
+        "sql": "select linguist, type, source_lang as from_lang, target_lang as to_lang, expires_on, days_left, state from v_credentials where state <> 'current' order by expires_on"
+      }
+    ]
+  },
+  {
+    "name": "money",
+    "title": "Money",
+    "subtitle": "Translation Agency for Claude Code: margin after linguist costs, what is owed both ways, rendered by npm run view",
+    "sections": [
+      {
+        "title": "Margin by client, last 90 days",
+        "note": "What the client paid less what the linguists were paid, ex GST.",
+        "sql": "select client, count(*) as items, to_char(sum(price_cents) / 100.0, 'FM$999,990') as charged, to_char(sum(margin_cents) / 100.0, 'FM$999,990') as left_after_linguists, round(sum(margin_cents) * 100.0 / nullif(sum(price_cents), 0), 1) as margin_pct from v_margins where on_date >= current_date - 90 group by client order by margin_pct"
+      },
+      {
+        "title": "Margin by service and language",
+        "sql": "select line as service, pair, count(*) as items, round(sum(margin_cents) * 100.0 / nullif(sum(price_cents), 0), 1) as margin_pct from v_margins where on_date >= current_date - 90 group by line, pair order by margin_pct"
+      },
+      {
+        "title": "Finished and not invoiced",
+        "sql": "select ref as item, client, done_on, description, to_char(amount_cents / 100.0, 'FM$999,990.00') as ex_gst from v_unbilled order by done_on"
+      },
+      {
+        "title": "Invoices open",
+        "sql": "select ref, client, status, issued_on, due_on, to_char(total_cents / 100.0, 'FM$999,990.00') as ex_gst, days_overdue from v_invoices where status in ('draft', 'issued') order by days_overdue desc, ref"
+      },
+      {
+        "title": "Owed to linguists",
+        "sql": "select linguist, count(*) as items, min(done_on) as oldest, to_char(sum(amount_cents) / 100.0, 'FM$999,990.00') as amount from v_payables group by linguist order by linguist"
+      }
+    ]
+  },
+  {
+    "name": "panel",
+    "title": "The panel",
+    "subtitle": "Translation Agency for Claude Code: who works in what, their NAATI credentials and their load, rendered by npm run view",
+    "sections": [
+      {
+        "title": "Linguists",
+        "sql": "select l.ref, l.name, l.kind, coalesce(l.competence, 'NOT RECORDED') as competence, coalesce(l.nda_signed_on::text, 'NOT ON FILE') as confidentiality_agreement, (select string_agg(source_lang || ' > ' || target_lang, ', ' order by source_lang) from linguist_pairs p where p.linguist_id = l.id) as translates, (select count(*) from jobs j where j.linguist_id = l.id and j.status = 'assigned') as jobs_open, (select count(*) from bookings b where b.linguist_id = l.id and b.status = 'assigned') as bookings_open from linguists l where l.status = 'active' order by l.name"
+      },
+      {
+        "title": "NAATI credentials",
+        "sql": "select linguist, type, source_lang as from_lang, target_lang as to_lang, number, expires_on, state from v_credentials order by linguist, type"
+      },
+      {
+        "title": "Language pairs with one linguist or none",
+        "note": "Where a single sick day stops the work. A revision needs a second linguist in the same direction.",
+        "sql": "select source_lang || ' > ' || target_lang as pair, count(*) as linguists, string_agg(l.name, ', ') as who from linguist_pairs p join linguists l on l.id = p.linguist_id and l.status = 'active' group by source_lang, target_lang having count(*) < 2 order by pair"
       }
     ]
   }
